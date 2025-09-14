@@ -1,58 +1,35 @@
 import telebot
+from yt_dlp import YoutubeDL
+import os
 
-# 🔑 Replace with your bot token
-BOT_TOKEN = "7600634437:AAFvGomJfy-r758y4Dn7vjXrUBUrEfVNu_o"
-bot = telebot.TeleBot(BOT_TOKEN)
+TOKEN = '7600634437:AAFvGomJfy-r758y4Dn7vjXrUBUrEfVNu_o'
+bot = telebot.TeleBot(TOKEN)
 
-# 🎬 Content database (edit this to add movies/series links)
-content_db = {
-    "inception": "https://example.com/inception",
-    "avatar": "https://example.com/avatar",
-    "money heist": "https://example.com/money-heist"
+# Configure yt-dlp
+ydl_opts = {
+    'outtmpl': 'downloads/%(title)s.%(ext)s',
+    'format': 'best',
 }
 
-# 🟢 /start command
+if not os.path.exists('downloads'):
+    os.makedirs('downloads')
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    welcome_text = (
-        "🎬 *Welcome to Cine Stream Bot!*\n\n"
-        "Use `/search <movie/series>` to find content.\n"
-        "Example: `/search avatar`\n\n"
-        "❗ Accurate match & keyword match both supported."
-    )
-    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown")
+    bot.reply_to(message, "Send me a YouTube link and I'll download the video for you.")
 
-# 🔎 /search command
-@bot.message_handler(commands=['search'])
-def search(message):
-    query = message.text.replace("/search", "").strip().lower()
+@bot.message_handler(func=lambda message: True)
+def download_video(message):
+    url = message.text.strip()
+    bot.send_message(message.chat.id, "Processing your link...")
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+            with open(file_path, 'rb') as f:
+                bot.send_video(message.chat.id, f)
+        os.remove(file_path)
+    except Exception as e:
+        bot.send_message(message.chat.id, f"Failed to download: {str(e)}")
 
-    if not query:
-        bot.reply_to(message, "⚠️ Please provide a search term.\nExample: `/search inception`", parse_mode="Markdown")
-        return
-
-    # First check for exact match
-    if query in content_db:
-        bot.send_message(
-            message.chat.id,
-            f"✅ Found: *{query.title()}*\n🔗 {content_db[query]}",
-            parse_mode="Markdown"
-        )
-        return
-
-    # Then check for keyword match
-    for key, link in content_db.items():
-        if query in key or key in query:
-            bot.send_message(
-                message.chat.id,
-                f"✅ Found: *{key.title()}*\n🔗 {link}",
-                parse_mode="Markdown"
-            )
-            return
-
-    # If nothing found
-    bot.send_message(message.chat.id, "❌ No content found for your search.")
-
-# 🚀 Run the bot
-print("🤖 Bot is running...")
-bot.infinity_polling()
+bot.polling()
